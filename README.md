@@ -4,7 +4,7 @@
 
 An easy place to store your mouse sensitivities across a library of games.
 
-**[Download](https://github.com/as9pa/sensvault/releases/latest)** (Windows x64)
+**[Download](https://github.com/as9p/sensvault/releases/latest)** (Windows x64)
 
 ## What it does
 
@@ -23,7 +23,7 @@ An easy place to store your mouse sensitivities across a library of games.
 
 Requires Windows x64.
 
-| [Releases](https://github.com/as9pa/sensvault/releases) | Size    | Needs .NET?                                                                 |
+| [Releases](https://github.com/as9p/sensvault/releases) | Size    | Needs .NET?                                                                 |
 | ------------------------------------------------------- | ------- | --------------------------------------------------------------------------- |
 | `sensvault-v0.3.0-win-x64.exe`                          | ~62 MB  | No, the runtime is inside                                                   |
 | `sensvault-v0.3.0-win-x64-dotnet.zip`                   | ~120 KB | Yes, [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/en-us/download) |
