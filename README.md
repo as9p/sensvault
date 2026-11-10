@@ -37,8 +37,13 @@ Needs the .NET 10 SDK.
     dotnet build
     dotnet run
 
-Release builds are made with `dotnet publish -c Release -r win-x64 -p:PublishSingleFile=true`,
-with `--self-contained true` for the `.exe` and `--self-contained false` for the `-dotnet.zip`.
+Release files are built two ways. The self-contained `.exe`, with compression on:
+
+    dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+
+The `-dotnet.zip` is a plain framework-dependent publish (no single file), zipped:
+
+    dotnet publish -c Release -r win-x64 --self-contained false
 
 ## License
 
