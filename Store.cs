@@ -86,29 +86,135 @@ public static class Store
 
     public static string FilePath { get; } = Path.Combine(Folder, "data.json");
 
-    public static AppData Load()
+    /// <summary>How many parked copies of a corrupt file are kept. Older ones go first.</summary>
+    private const int KeepBad = 5;
+
+    /// <summary>Set by <see cref="Load()"/> when the file could not be read, so the window
+    /// can say so on the status line. Null when the load was clean.</summary>
+    public static string? LoadProblem { get; private set; }
+
+    public static AppData Load() => Load(FilePath);
+
+    internal static AppData Load(string path)
     {
+        LoadProblem = null;
+        DeleteStaleTemps(path);
         try
         {
-            if (!File.Exists(FilePath))
+            if (!File.Exists(path))
                 return new AppData();
-            return JsonSerializer.Deserialize<AppData>(File.ReadAllText(FilePath)) ?? new AppData();
+            return JsonSerializer.Deserialize<AppData>(File.ReadAllText(path)) ?? new AppData();
         }
         catch (Exception)
         {
             // A corrupt file must not cost you the whole vault -- park it and start clean.
+            // Each parked copy gets its own name, so a second bad start never overwrites the
+            // copy from the first.
             try
             {
-                File.Move(FilePath, FilePath + ".bad", overwrite: true);
+                var parked = ParkBad(path);
+                LoadProblem =
+                    $"data.json could not be read and was saved as {Path.GetFileName(parked)}. Starting empty.";
             }
-            catch { }
+            catch (Exception ex)
+            {
+                LoadProblem = "data.json could not be read or set aside: " + ex.Message;
+            }
             return new AppData();
         }
     }
 
-    public static void Save(AppData data)
+    public static void Save(AppData data) => Save(data, FilePath);
+
+    internal static void Save(AppData data, string path)
     {
-        Directory.CreateDirectory(Folder);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(data, Options));
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        WriteAtomic(path, JsonSerializer.Serialize(data, Options));
+    }
+
+    /// <summary>Writes to a temp file beside <paramref name="path"/> and moves it over, so a
+    /// crash mid-write never leaves a half-written file.</summary>
+    private static void WriteAtomic(string path, string contents)
+    {
+        var temp = $"{path}.{Guid.NewGuid():N}.tmp";
+        try
+        {
+            // Flush to disk before the move. Without this, a power cut right after the
+            // move can leave data.json full of zero bytes on NTFS.
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write))
+            using (var writer = new StreamWriter(stream))
+            {
+                writer.Write(contents);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
+            File.Move(temp, path, overwrite: true);
+        }
+        catch
+        {
+            try
+            {
+                File.Delete(temp);
+            }
+            catch { }
+            throw;
+        }
+    }
+
+    /// <summary>Moves the unreadable file to a timestamped .bad name that is not taken yet,
+    /// then trims the parked copies down to <see cref="KeepBad"/>. The stamp sorts by name,
+    /// so the oldest copies are the first names in order. A plain data.json.bad left by an
+    /// older version is never touched.</summary>
+    private static string ParkBad(string path)
+    {
+        var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss-fff");
+        var target = $"{path}.{stamp}-01.bad";
+        for (var n = 2; File.Exists(target); n++)
+            target = $"{path}.{stamp}-{n:D2}.bad";
+        File.Move(path, target);
+
+        try
+        {
+            var parked = Siblings(path, ".bad")
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            foreach (var f in parked.Take(Math.Max(0, parked.Count - KeepBad)))
+                File.Delete(f);
+        }
+        catch { }
+
+        return target;
+    }
+
+    /// <summary>A crash between writing the temp file and moving it over leaves the temp
+    /// behind. The real file is still whole then, so the leftover is just clutter.</summary>
+    private static void DeleteStaleTemps(string path)
+    {
+        try
+        {
+            foreach (var f in Siblings(path, ".tmp"))
+                File.Delete(f);
+        }
+        catch { }
+    }
+
+    /// <summary>Files named <c>{path}.{something}{suffix}</c>, with something not empty.
+    /// Filtered here rather than with a search pattern, because Windows wildcard rules for
+    /// dots would also match names this does not mean.</summary>
+    private static IEnumerable<string> Siblings(string path, string suffix)
+    {
+        var dir = Path.GetDirectoryName(path)!;
+        if (!Directory.Exists(dir))
+            return [];
+        var prefix = Path.GetFileName(path) + ".";
+        return Directory
+            .GetFiles(dir, Path.GetFileName(path) + "*")
+            .Where(f =>
+            {
+                var name = Path.GetFileName(f);
+                return name.Length > prefix.Length + suffix.Length
+                    && name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                    && name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+            });
     }
 }

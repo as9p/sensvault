@@ -142,6 +142,8 @@ public partial class MainWindow : Window
         NoStatusBar.IsChecked = _data.HideStatusBar;
         ApplyStatusBar();
         DataPath.Text = Store.Folder;
+        if (Store.LoadProblem is { } problem)
+            Warn(problem);
 
         // Read off the assembly rather than written into the XAML: the csproj's <Version> is
         // the one place the number is kept, and a second copy here would go stale the first
