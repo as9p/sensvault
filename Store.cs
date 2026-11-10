@@ -139,7 +139,15 @@ public static class Store
         var temp = $"{path}.{Guid.NewGuid():N}.tmp";
         try
         {
-            File.WriteAllText(temp, contents);
+            // Flush to disk before the move. Without this, a power cut right after the
+            // move can leave data.json full of zero bytes on NTFS.
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write))
+            using (var writer = new StreamWriter(stream))
+            {
+                writer.Write(contents);
+                writer.Flush();
+                stream.Flush(flushToDisk: true);
+            }
             File.Move(temp, path, overwrite: true);
         }
         catch
@@ -167,7 +175,9 @@ public static class Store
 
         try
         {
-            var parked = Siblings(path, ".bad").OrderBy(f => f, StringComparer.OrdinalIgnoreCase).ToList();
+            var parked = Siblings(path, ".bad")
+                .OrderBy(f => f, StringComparer.OrdinalIgnoreCase)
+                .ToList();
             foreach (var f in parked.Take(Math.Max(0, parked.Count - KeepBad)))
                 File.Delete(f);
         }
